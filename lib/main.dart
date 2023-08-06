@@ -1,19 +1,34 @@
+import 'package:budget/pages/login_register_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'firebase_options.dart';
 
-void main() => runApp(BudgetTrackerApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(BudgetTrackerApp());
+}
 
 class BudgetTrackerApp extends StatelessWidget {
+  CollectionReference users = FirebaseFirestore.instance.collection('users');
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Budget Tracker',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.dark,
+        primarySwatch: Colors.blue,
       ),
-      initialRoute: '/app',
+      initialRoute: FirebaseAuth.instance.currentUser != null
+          ? '/home' // Redirect to HomeScreen if the user is already logged in
+          : '/', // Show LoginPage if the user is not logged in
       routes: {
-        '/app': (context) => HomeScreen(),
-        '/expense': (context) => ExpenseScreen(),
+        '/': (context) => LoginPage(),
+        '/home': (context) => HomeScreen(),
         '/addExpense': (context) => AddExpenseScreen(),
       },
     );
@@ -26,12 +41,46 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String userName = '@username';
-  List<String> topics = ['Groceries', 'Transport', 'Entertainment'];
-  List<double> amounts = [100.0, 200.0, -50.0]; // Example initial expenses
+  String userName = '';
+  List<Map<String, dynamic>> expenses = [];
+  List<Goal> goals = [];
+  String topic = '';
+  double amount = 0.0;
+  bool showGoals = false; // Track whether to show the goals section or not
 
   double getTotalExpense() {
-    return amounts.fold(0, (previousValue, element) => previousValue + element);
+    return expenses.fold(
+        0, (previousValue, element) => previousValue + element['amount']);
+  }
+
+  void addExpense(String topic, double amount) {
+    if (topic.isNotEmpty && amount > 0) {
+      setState(() {
+        expenses.add({'topic': topic, 'amount': amount});
+      });
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Invalid Input'),
+          content: Text('Please enter a valid topic and amount.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void deleteExpense(int index) {
+    setState(() {
+      expenses.removeAt(index);
+    });
   }
 
   @override
@@ -46,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               children: [
                 Text(
-                  'Hi, $userName',
+                  'Hi, Welcome Back ✌️ ',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -56,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                Text('Total Expenses This Month',
+                Text('Total Expenses 💰 till now',
                     style:
                         TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                 SizedBox(height: 8),
@@ -67,68 +116,94 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Expanded(
             child: ListView.builder(
-              itemCount: topics.length,
-              itemBuilder: (context, index) => ListTile(
-                title: Text(topics[index]),
-                subtitle: Text('₹${amounts[index].toStringAsFixed(2)}'),
-                trailing: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      topics.removeAt(index);
-                      amounts.removeAt(index);
-                    });
-                  },
-                  child: Text('Delete'),
+              itemCount: expenses.length,
+              itemBuilder: (context, index) => Dismissible(
+                key: Key(expenses[index]['topic']),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  color: Colors.red,
+                  alignment: Alignment.centerRight,
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (direction) => deleteExpense(index),
+                child: ListTile(
+                  title: Text(expenses[index]['topic']),
+                  subtitle:
+                      Text('₹${expenses[index]['amount'].toStringAsFixed(2)}'),
                 ),
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: ElevatedButton(
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  builder: (context) => Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextField(
+                          onChanged: (value) {
+                            topic = value;
+                          },
+                          decoration: InputDecoration(labelText: 'Topic'),
+                        ),
+                        SizedBox(height: 16),
+                        TextField(
+                          onChanged: (value) {
+                            amount = double.tryParse(value) ?? 0.0;
+                          },
+                          decoration:
+                              InputDecoration(labelText: 'Enter Amount'),
+                          keyboardType: TextInputType.number,
+                        ),
+                        SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            addExpense(topic, amount);
+                            Navigator.pop(context);
+                          },
+                          child: Text('Add'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Text('Add Expense'),
+            ),
+          ),
+          SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('Add Topic'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        decoration: InputDecoration(labelText: 'Topic Name'),
-                        onChanged: (value) {},
-                      ),
-                      TextField(
-                        decoration: InputDecoration(labelText: 'Amount'),
-                        keyboardType: TextInputType.number,
-                        onChanged: (value) {},
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          topics.add('New Topic');
-                          amounts.add(0.0);
-                        });
-                        Navigator.pop(context);
-                      },
-                      child: Text('Add'),
-                    ),
-                  ],
-                ),
-              );
+              setState(() {
+                showGoals = !showGoals;
+              });
             },
-            child: Text('Add'),
+            child: Text(showGoals ? 'Hide Goals' : 'See Goals'),
           ),
+          if (showGoals)
+            Expanded(
+              child: ListView.builder(
+                itemCount: goals.length,
+                itemBuilder: (context, index) => ListTile(
+                  title: Text(goals[index].topic),
+                  subtitle: Text(
+                      'Target Amount: ₹${goals[index].targetAmount.toStringAsFixed(2)}'),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 }
+
+// AddExpenseScreen and other classes remain the same
 
 class ExpenseScreen extends StatelessWidget {
   @override
@@ -176,4 +251,11 @@ class AddExpenseScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class Goal {
+  final String topic;
+  final double targetAmount;
+
+  Goal(this.topic, this.targetAmount);
 }

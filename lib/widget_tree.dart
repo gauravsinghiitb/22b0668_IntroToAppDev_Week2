@@ -17,23 +17,13 @@ class _WidgetTreeState extends State<WidgetTree> {
     return StreamBuilder<User?>(
       stream: Auth().authStateChanges,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.active) {
-          User? user = snapshot.data;
-
-          if (user == null) {
-            // User is not logged in, navigate to login/register page
-            return LoginPage();
-          } else {
-            // User is logged in, navigate to home page
-            return HomePage();
-          }
-        } else {
-          // Show a loading indicator while waiting for the connection to be active
-          return Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
+        if (snapshot.hasData) {
+          return HomePage();
+        }
+        // User is not logged in, navigate to login/register page
+        else {
+          // User is logged in, navigate to home page
+          return LoginPage();
         }
       },
     );
